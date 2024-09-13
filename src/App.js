@@ -6,7 +6,8 @@ import CartPage from './components/Cart/CartPage';
 import ProtectedRoute from './api/ProtectedRoute';
 import RegisterPage from "./pages/RegisterPage";
 import OrderHistoryPage from "./pages/OrderHistoryPage";
-import OrderSuccessfulPage from "./pages/OrderSuccessfulPage"; // Assuming you're using protected routes for authenticated pages
+import OrderSuccessPage from './pages/OrderSuccessPage';
+ // Assuming you're using protected routes for authenticated pages
 
 function App() {
   return (
@@ -40,6 +41,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/order-success" element={<OrderSuccessPage />} />
       </Routes>
       </Router>
   );

@@ -9,6 +9,7 @@ const CartPage = () => {
 
   const handleCheckout = () => {
     alert('Proceeding to checkout...');
+    navigate('/order-success');
   };
 
   const handleLogout = () => {

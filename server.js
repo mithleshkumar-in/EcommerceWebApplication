@@ -34,7 +34,22 @@ db.connect(err => {
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
 // Routes
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer token
 
+  if (!token) {
+    return res.status(401).json({ message: 'Access Denied, Token Missing' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or Expired Token' });
+    }
+    req.user = user; // Store user info in req object
+    next();
+  });
+}
 // Registration Route
 app.post('/api/register', async (req, res) => {
   const { email, password } = req.body;
@@ -90,6 +105,60 @@ app.post('/api/login', (req, res) => {
     res.json({ token, message: 'Login successful' });
   });
 });
+
+app.get('/api/cart', authenticateToken, async (req, res) => {
+  const userId = req.user.id; // Assuming you have user information in the JWT token
+  try {
+    const [cartItems] = await pool.query('SELECT * FROM cart WHERE user_id = ?', [userId]);
+    res.json(cartItems); // Send the cart items as JSON
+  } catch (error) {
+    console.error('Error fetching cart items:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Endpoint to proceed with checkout
+app.post('/api/checkout', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    // Get all items in the user's cart
+    const [cartItems] = await pool.query('SELECT * FROM cart WHERE user_id = ?', [userId]);
+
+    if (cartItems.length === 0) {
+      return res.status(400).json({ message: 'No items in cart' });
+    }
+
+    // Calculate total amount
+    const totalAmount = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+
+    // Insert order into orders table
+    const [orderResult] = await pool.query('INSERT INTO orders (user_id, total_amount) VALUES (?, ?)', [userId, totalAmount]);
+    const orderId = orderResult.insertId;
+
+    // Insert each cart item into order_items table and update product stock
+    for (const item of cartItems) {
+      await pool.query('INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)', [
+        orderId,
+        item.product_id,
+        item.quantity,
+        item.price
+      ]);
+
+      // Update product stock
+      await pool.query('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.product_id]);
+    }
+
+    // Clear cart after checkout
+    await pool.query('DELETE FROM cart WHERE user_id = ?', [userId]);
+
+    res.status(200).json({ message: 'Order placed successfully' });
+  } catch (error) {
+    console.error('Error during checkout:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 
 // Start the server
 app.listen(port, () => {
